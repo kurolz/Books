@@ -1,0 +1,90 @@
+
+#!/bin/bash
+# httpd_install
+cd /media
+tar zxf libmcrypt-2.5.8.tar.gz -C /
+tar zxf mhash-0.9.9.9.tar.gz -C /
+tar zxf mcrypt-2.6.8.tar.gz -C /
+tar zxf php-5.3.28.tar.gz -C /
+tar zxf httpd-2.2.17.tar.gz -C /
+tar zxf cmake-2.8.12.tar.gz -C /
+tar zxf mysql-5.5.38.tar.gz -C /
+rpm -ivh bind-9.8.2-0.17.rc1.el6_4.6.x86_64.rpm 
+cd /httpd-2.2.17/
+./configure --prefix=/usr/local/httpd 
+make 
+make install 
+cd /cmake-2.8.12/
+./configure
+gmake 
+gmake install 
+groupadd mysql
+useradd mysql -g mysql
+cd /mysql-5.5.38/
+cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mysql -DSYSCONFDIR=/etc  
+make 
+make install 
+chown -R mysql:mysql /usr/local/mysql
+rm -rf /etc/my.cnf
+cp support-files/my-medium.cnf /etc/my.cnf
+/usr/local/mysql/scripts/mysql_install_db --user=mysql --basedir=/usr/local/mysql/ --datadir=/usr/local/mysql/data/
+echo "PATH=:$PATH:/usr/local/mysql/bin" >> /etc/profile
+. /etc/profile
+cp support-files/mysql.server /etc/rc.d/init.d/mysqld
+chmod +x /etc/rc.d/init.d/mysqld
+chkconfig --add mysqld
+service mysqld start
+cd /libmcrypt-2.5.8/
+./configure
+make
+make install
+cd /mhash-0.9.9.9/
+./configure
+make 
+make install
+cd /mcrypt-2.6.8/
+export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+./configure
+make 
+make install
+cd /php-5.3.28/
+./configure --prefix=/usr/local/php5 --with-mcrypt --with-apxs2=/usr/local/httpd/bin/apxs --with-mysql=/usr/local/mysql/ --with-config-file-path=/usr/local/php5 --enable-mbstring
+make 
+make install
+cp php.ini-development /usr/local/php5/php.ini
+httpd="addtype application/x-httpd-php .php"
+echo "$httpd" >> /usr/local/httpd/conf/httpd.conf
+shanchuphp=$(sed -i 's/short_open_tag[[:space:]]=[[:space:]]Off//g' /usr/local/php5/php.ini)
+php5="short_open_tag = on"
+echo "$php5" >> /usr/local/php5/php.ini
+cd /media
+mv upload /usr/local/httpd/htdocs/bbs
+chmod -R 777 /usr/local/httpd/htdocs/bbs
+shanchuhttpd=$(sed -i 's/DirectoryIndex[[:space:]]index.html//g' /usr/local/httpd/conf/httpd.conf)
+xieruhttpd=$(sed -i '/IfModule[[:space:]]dir_module/ a DirectoryIndex index.php index.html' /usr/local/httpd/conf/httpd.conf)
+/usr/local/httpd/bin/apachectl start
+shurudns='options {
+        directory       "/var/named" ;};
+zone "benet.com" IN {
+        type master;
+        file "benet.com";
+};'
+rm -rf /etc/named.conf
+cd /etc
+touch named.conf
+echo "$shurudns" >> /etc/named.conf
+cd /var/named
+cp named.localhost benet.com
+xierudns="www     A       192.168.1.1"
+echo "$xierudns" >> /var/named/benet.com
+chmod 777 /var/named/benet.com
+service named start
+service iptables stop
+ifconfig eth1 192.168.1.1
+
+
+
+
+
+
+

@@ -1,0 +1,73 @@
+rpm -e httpd --nodeps
+tar zxvf httpd-2.2.25.tar.gz -C /usr/local/src
+cd /usr/local/src/httpd-2.2.25
+./configure --prefix=/usr/local/httpd --enable-so --enable-rewrite --enable-charset-lite --enable-cgi
+make && make install
+ln -s /usr/local/httpd/bin/* /usr/local/bin/
+cp /usr/local/httpd/bin/apachectl /etc/init.d/httpd
+cd /etc/init.d/
+sed -i "1a\#chkconfig:25 25 25\n#description:this is apache server" httpd
+chkconfig --add httpd
+chkconfig httpd on
+service httpd restart
+cd /usr/local/src
+#http
+echo "http安装完成"
+yum -y install zlib-devel libxml2-devel libxml2*
+tar zxvf libmcrypt-2.5.8.tar.gz
+cd libmcrypt-2.5.8
+./configure && make && make install
+ln -s /usr/local/lib/libmcrypt.* /usr/lib/
+cd /usr/local/src
+tar zxvf mhash-0.9.9.9.tar.gz
+cd mhash-0.9.9.9
+./configure && make && make install
+ln -s /usr/local/lib/libmhash* /usr/lib/
+cd /usr/local/src
+tar zxvf mcrypt-2.6.8.tar.gz
+cd mcrypt-2.6.8
+export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+./configure && make && make install
+cd /usr/local/src
+echo "开始安装mysql数据库"
+groupadd mysql
+useradd -M -s /sbin/nologin -g mysql mysql
+yum -y install ncurses-devel-5.7
+tar zxvf cmake-2.8.7.tar.gz -C /usr/local/src/
+cd /usr/local/src/cmake-2.8.7
+./configure
+gmake && gmake install
+cd /usr/local/src
+tar zxvf mysql-5.5.22.tar.gz
+cd mysql-5.5.22
+cmake -DCMAKE_INSTALL_PREFIX=/usr/local/mysql -DSYSCONFDIR=/etc -DDEFAULT_CHARSET=utf8 -DDEFAULT_COLLATION=utf8_general_ci -DWITH_EXTRA_CHARSETS=all
+make && make install
+cd /usr/local/mysql/
+chown -R  mysql:mysql /usr/local/mysql/
+rm -rf /etc/my.cnf
+cp /usr/local/mysql/support-files/my-medium.cnf /etc/my.cnf   #复制启动脚本
+/usr/local/mysql/scripts/mysql_install_db  --user=mysql --basedir=/usr/local/mysql --datadir=/usr/local/mysql/data/  #初始化数据库
+ln -s /usr/local/mysql/bin/* /usr/local/bin/
+cp -p /usr/local/mysql/support-files/mysql.server /etc/rc.d/init.d/mysqld
+chkconfig --add mysqld
+chkconfig mysqld on
+echo “数据库安装完成”
+cd /usr/local/src
+echo "开始安装php"
+tar zxvf php-5.3.28.tar.gz
+cd php-5.3.28
+./configure --prefix=/usr/local/php5 --with-mcrypt --with-apxs2=/usr/local/httpd/bin/apxs --with-mysql=/usr/local/mysql --with-config-file-path=/usr/local/php5 --enable-mbstring --enable-sockets
+make && make install
+cp /usr/local/src/php-5.3.28/php.ini-development /usr/local/php5/php.ini
+sed -i 's/;default_charset = "iso-8859-1"/default_charset = "utf-8"/' /usr/local/php5/php.ini
+sed -i 's/short_open_tag = Off/short_open_tag = On/' /usr/local/php5/php.ini
+cd /usr/local/src
+tar zxvf ZendGuardLoader-php-5.3-linux-glibc23-x86_64.tar.gz        
+cd ZendGuardLoader-php-5.3-linux-glibc23-x86_64
+cd php-5.3.x/
+cp ZendGuardLoader.so /usr/local/php5/lib/php/
+echo "zend_extension=/usr/local/php5/lib/php/ZendGuardLoader.so" >> /usr/local/php5/php.ini
+echo "zend_loader.enable=1" /usr/local/php5/php.ini >> /usr/local/php5/php.ini
+#修改httpd配置文件
+sed -i "309a\ \tAddType application/x-http-php .php" /usr/local/httpd/conf/httpd.conf
+sed -i 's/DirectoryIndex index.html/DirectoryIndex index.php index.html/' /usr/local/httpd/conf/httpd.conf

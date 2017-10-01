@@ -1,0 +1,103 @@
+#!/bin/bash
+function usage(){
+echo "Usage:`basename $0`<HostName>[-a<ServerAliasName>][-4<IPv4Address>][-p<Port>][-f]"
+echo "
+         Example 1. Make a NAME-based Virtual Host:
+          # `basename $0` www.abc.com
+         Example 2. Make a NAME-based Virtual Host with an ServerAliasName:
+          # `basename $0` www.abc.com -a docs.abc.com
+         Example 3. Make a IP-based Virtual Host:
+          # `basename $0` www.abc.com -4 192.168.0.1
+         Example 4. Make a Port-based Virtual Host:
+          # `basename $0` www.abc.com -4 192.168.0.1 -p 8888
+         Example 5. Make a NAME-based Virtual Host(Overwrite exist config):
+          # `basename $0` www.abc.com -f
+"
+exit 1
+}
+function chkIP(){
+regex="\b(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[1-9])\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[1-9])\b"
+retrun $(egrep $regex<<<$1 &>/dev/null)
+}
+[ -z "$1" ] && usage
+VHFQDN=$1
+VHDOMAIN=${VHFQDN#*.}
+VHSHORTNAME=${VHFQDN%%.*}
+VHWEBDIR=/var/www/vhosts
+VHCONFDIR=/etc/httpd/vhosts.d/
+[ -d $VHCONFDIR ] || mkdir $VHCONFDIR
+
+grep 'vhosts.d' /etc/httpd/conf/httpd.conf &> /dev/null || echo 'IncludeOptional vhosts.d/*.conf' >>/etc/httpd/conf/httpd.conf
+shift
+while getopts 4:a:p:f option
+do
+     case $option in
+         4) ip=$OPTARG
+            chkIP $IP || { echo "IPv4 invalid.";exit 2;};;
+         a) aln=$OPTARG ;;
+         p) port=$OPTARG ;;
+         f) overwrite='1' ;;
+         \?) usage ;;
+
+     esac
+
+done
+# echo ip=$ip,port=$port,aln=$aln,overwrite=$overwrite
+
+[[ -n "$ip" && -n "$port" ]] && {IPePORT="$ip:$port";PORT="$port";PORT2="_$port";}
+[[ -n "$ip" && -z "$port" ]] && {IPePORT="$ip:80";PORT="80";PORT2@="";}
+[[ -n "$ip" && -z "$port" ]] && {IPePORT='*:80';PORT="80";PORT2@="";}
+[[ -n "$aln" ]] && AliasLine="ServerAlias $aln"||AliasLine=""
+
+VHCONFFILE=$VHCONFDIR/$VHFQDN$PORT2.conf
+[[ -f $VHCONFFILE && -z $overwrite ]] &&\
+{
+echo "Config Already Exist!" 
+echo "If you Really want to overwrite it,Please append -f parameter"
+exit 3
+}
+VHSITEDIR=$VHWEBDIR/$VHFQDN$PORT2
+mkdir -p $VHSITEDIR/{htdocs,logs,conf,cgi-bin} &>/dev/null
+echo "This is a website for $VHFQDN:$PORT">$VHSITEDIR/htdocs/index.html
+echo "
+<VirtualHost $IPePORT>
+   ServerAdmin webmaster@$VHDOMAIN
+   ServerName $VHFQDN:$PORT
+   $AliasLine
+   DocumentRoot $VHSITEDIR/htdocs
+   ErrorLog $VHSITEDIR/logs/error_log
+   CustomLog $VHSITEDIR/logs/access_log combined
+   UseCanonicalName Off
+   <Directory $VHSITEDIR/htdocs>
+    Options Indexs FolloSymLinks
+    AllowOverride None
+    Require all granted
+   </Directory>
+   SetEnvIfNoCase Referer \"^http://$VHFQDN\" local_ref
+    <filematch \"\.(mp3|mp4|zip|rar|jpg|gif|png)\">
+        Require all denied
+        Require local
+        Require env local_ref
+    </filematch>
+</VirtualHost>
+">$VHCONFFILE
+[[ "$PORT"=='80' && "$VHSHORTNAME"=="www" ]] && \
+echo "
+<VirtualHost $IPePORT>
+ServerName $VHDOMAIN:$PORT
+Redirect permanent /http://$VHFQDN
+</virtualHost>
+">>$VHCONFFILE
+if [[ "$PORT" != "80" ]];then
+    grep $PORT /etc/httpd/conf/httpd.conf &>/dev/null
+    [ $? -ne 0 ] && echo "Listen $PORT" >>/etc/httpd/conf.d/ports.conf
+    #firewall-cmd --add-port=$PORT/tcp --permanent
+    #firewall-cmd --reload
+fi
+if [ -e /etc/logrotate.d/httpd_vhosts];then
+else
+    cp /etc/logrotate.d/httpd{,_vhosts}
+    sed -i 's#/var/log/httpd#/var/www/vhosts#' /etc/logrotate.d/httpd_vhosts
+fi
+#systemctl reload httpd
+#chmod 700 /root/bin/mkvhost.apache
